@@ -1,102 +1,156 @@
-# Instalación de Zabbix con Docker
+**Zabbix con Docker Compose**
+==========================
 
-=====================================
-
-Este proyecto utiliza Docker para instalar y configurar Zabbix, una herramienta de monitoreo de redes y sistemas. La configuración ha sido diseñada en base a lo propuesto por (**José María Labarta**)[https://www.youtube.com/@josemarialabarta]
-
-## Copyright
-
----
-
-Este proyecto está basado en la configuración original de **José María Labarta**. Este documento es una adaptación para fines educativos y de referencia.
+Este proyecto utiliza Docker Compose para desplegar un entorno completo de Zabbix, incluyendo el servidor, el frontend web, el agente y el servidor de PostgreSQL. A continuación, se detallan las características y configuraciones del proyecto.
 
 ## Requisitos Previos
 
+- **Docker**: Asegúrate de tener Docker instalado en tu sistema.
+- **Docker Compose**: Necesitarás Docker Compose para ejecutar este proyecto.
+
+## Servicios
+
+Este proyecto incluye los siguientes servicios:
+
+### 1. **Zabbix Server**
+- **Imagen**: `zabbix/zabbix-server-pgsql:alpine-7.0-latest`
+- **Puertos**: Exposición del puerto `10051` para la comunicación con los agentes.
+- **Volúmenes**:
+  - `/etc/localtime` y `/etc/timezone` para sincronizar la zona horaria.
+  - `./zbx_env/usr/lib/zabbix/alertscripts`, `./zbx_env/usr/lib/zabbix/externalscripts`, `./zbx_env/var/lib/zabbix/export`, `./zbx_env/var/lib/zabbix/modules`, `./zbx_env/var/lib/zabbix/enc`, `./zbx_env/var/lib/zabbix/ssh_keys`, `./zbx_env/var/lib/zabbix/mibs`, `./zbx_env/var/lib/zabbix/snmptraps` para scripts y configuraciones personalizadas.
+- **Variables de Entorno**:
+  - `POSTGRES_USER=zabbix`
+  - `POSTGRES_PASSWORD=zabbix`
+  - `POSTGRES_DB=zabbixNew`
+  - `ZBX_HISTORYSTORAGETYPES=log,text`
+  - `ZBX_DEBUGLEVEL=1`
+  - `ZBX_HOUSEKEEPINGFREQUENCY=1`
+  - `ZBX_MAXHOUSEKEEPERDELETE=5000`
+  - `ZBX_PROXYCONFIGFREQUENCY=3600`
+- **Dependencias**: Requiere que el servicio `postgres-server` esté disponible.
+- **Reinicios**: Configurado para reiniciar a menos que se detenga explícitamente.
+
+### 2. **Zabbix Web (Nginx)**
+- **Imagen**: `zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest`
+- **Puertos**: Exposición de los puertos `9080` y `8443` para el acceso web.
+- **Volúmenes**:
+  - `/etc/localtime` y `/etc/timezone` para sincronizar la zona horaria.
+  - `./zbx_env/etc/ssl/nginx` para configuraciones SSL personalizadas.
+  - `./zbx_env/usr/share/zabbix/modules/` para módulos adicionales.
+- **Healthcheck**: Verifica la disponibilidad del servicio web cada 10 segundos.
+- **Sysctls**: Configura `net.core.somaxconn=65535` para mejorar el rendimiento de la red.
+- **Variables de Entorno**:
+  - `POSTGRES_USER=zabbix`
+  - `POSTGRES_PASSWORD=zabbix`
+  - `POSTGRES_DB=zabbixNew`
+  - `ZBX_SERVER_HOST=server`
+  - `ZBX_POSTMAXSIZE=64M`
+  - `PHP_TZ=America/Argentina/Buenos_Aires`
+  - `ZBX_MAXEXECUTIONTIME=500`
+- **Dependencias**: Requiere que los servicios `server` y `postgres-server` estén disponibles.
+
+### 3. **Zabbix Agent**
+- **Imagen**: `zabbix/zabbix-agent2:alpine-7.0-latest`
+- **Puertos**: Exposición del puerto `10050` para la comunicación con el servidor.
+- **Volúmenes**:
+  - `/etc/localtime` y `/etc/timezone` para sincronizar la zona horaria.
+  - `./zbx_env/etc/zabbix/zabbix_agentd.d` para configuraciones personalizadas del agente.
+  - `./zbx_env/var/lib/zabbix/modules`, `./zbx_env/var/lib/zabbix/enc`, `./zbx_env/var/lib/zabbix/ssh_keys` para scripts y configuraciones adicionales.
+- **Privilegios**: Ejecuta el contenedor con privilegios elevados (`privileged: true`) y utiliza el PID del host (`pid: "host"`).
+- **Variables de Entorno**:
+  - `ZBX_SERVER_HOST=server`
+- **Dependencias**: Requiere que el servicio `server` esté disponible.
+
+### 4. **Zabbix SNMP Traps**
+- **Imagen**: `zabbix/zabbix-snmptraps:alpine-7.0-latest`
+- **Puertos**: Exposición del puerto `162` para recibir trampas SNMP.
+- **Volúmenes**: `./snmptraps:/var/lib/zabbix/snmptraps` para almacenar las trampas recibidas.
+- **Variables de Entorno**:
+  - `ZBX_SERVER_HOST=server`
+- **Dependencias**: Requiere que el servicio `server` esté disponible.
+
+### 5. **PostgreSQL Server**
+- **Imagen**: `postgres:16-alpine`
+- **Volúmenes**: `./zbx_env/var/lib/postgresql/data` para persistir los datos de la base de datos.
+- **Variables de Entorno**:
+  - `POSTGRES_PASSWORD=zabbix`
+  - `POSTGRES_USER=zabbix`
+  - `POSTGRES_DB=zabbixNew`
+- **Healthcheck**: Verifica la disponibilidad del servicio de PostgreSQL cada 10 segundos.
+
+## Instrucciones para Ejecutar
+
+1. **Clonar el Repositorio**:
+
+```bash
+git clone https://url.git
+```
+
+2. **Acceder al Directorio del Proyecto**:
+```bash
+cd proyecto
+```
+
+3. **Crear y Iniciar los Servicios**:
+```bash
+docker compose up -d
+```
+
+4. **Verificar el Estado de los Servicios**:
+
+```bash
+docker compose ps
+```
+
+5. **Acceder a la Interfaz Web de Zabbix**:
+   - URL: `http://localhost:9080` o `https://localhost:8443` (si tienes SSL configurado)
+   - Usuario: `Admin`
+   - Contraseña: `zabbix`
+
+## Configuración Adicional
+
+Para personalizar aún más tu entorno, puedes editar los volúmenes y variables de entorno según tus necesidades específicas.
+
+**Nota**: El comando `docker compose` genera dos carpetas: `snmptraps` y `zbx_env`, que son propiedad de `sudo`. Recomiendo copiar la estructura para tener permisos sobre ella y volver a levantar el contenedor.
+
+### Configuración del Agente Zabbix
+
+1. **Crear o editar el archivo de configuración del agente**:
+   ```conf
+   Server=server
+   ServerActive=server:10051
+   Hostname=Zabbix_server
+   ListenPort=10050
+   ```
+   Este archivo debe estar en `./zbx_env/etc/zabbix/zabbix_agentd.d/zabbix_agentd.conf`.
+
+2. **Conectar el Agente al Servidor Zabbix**:
+   - Inspecciona el contenedor del agente para obtener su IP:
+     ```bash
+     docker inspect id_contenedor
+     ```
+   - Actualiza la configuración del host en la interfaz web de Zabbix con la IP del contenedor.
+
+3. **Actualizar el Caché del Servidor Zabbix**:
+   ```bash
+   docker exec -it idDelContenedorZabbixServer zabbix_server -R config_cache_reload
+   ```
+
+¡Listo! Ahora deberías tener todo funcionando correctamente.
+
 ---
 
-- Docker instalado en tu sistema.
-- Conocimientos básicos sobre Docker y Zabbix.
-
-## Componentes del Proyecto
+**Créditos a [José María Labarta](https://www.youtube.com/@josemarialabarta)**
 
 ---
 
-Este proyecto utiliza varios contenedores Docker para desplegar una instalación completa de Zabbix:
+**Estructura del Proyecto**
 
-- **Zabbix Server**: Utiliza la imagen `zabbix/zabbix-server-pgsql:alpine-7.0-latest`.
-- **Zabbix Web**: Utiliza la imagen `zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest`.
-- **Zabbix Agent**: Utiliza la imagen `zabbix/zabbix-agent2:alpine-7.0-latest`.
-- **Zabbix SNMP Traps**: Utiliza la imagen `zabbix/zabbix-snmptraps:alpine-7.0-latest`.
-- **PostgreSQL Server**: Utiliza la imagen `postgres:16-alpine`.
+Este proyecto utiliza las siguientes carpetas y archivos:
 
-## Configuración
-
----
-
-La configuración se realiza mediante un archivo `docker-compose.yml`. Este archivo define los servicios, puertos, volúmenes y variables de entorno necesarias para cada contenedor.
-
-### Servicios
-
-#### Zabbix Server
-
-- **Puertos**: Exposición del puerto `10051`.
-- **Volúmenes**: Mapeo de directorios locales para scripts de alertas, exportaciones, módulos, claves SSH, MIBs y trampas SNMP.
-- **Dependencias**: Depende del servicio `postgres-server`.
-- **Variables de Entorno**: Configuración de PostgreSQL y parámetros de Zabbix.
-
-#### Zabbix Web
-
-- **Puertos**: Exposición de los puertos `8080` y `8443`.
-- **Volúmenes**: Mapeo de directorios para certificados SSL y módulos.
-- **Dependencias**: Depende de los servicios `server` y `postgres-server`.
-- **Variables de Entorno**: Configuración de PostgreSQL, Zabbix Server y parámetros de PHP.
-
-#### Zabbix Agent
-
-- **Puertos**: Exposición del puerto `10050`.
-- **Volúmenes**: Mapeo de directorios para configuraciones del agente y módulos.
-- **Dependencias**: Depende del servicio `server`.
-- **Variables de Entorno**: Configuración del host del servidor Zabbix.
-
-#### Zabbix SNMP Traps
-
-- **Puertos**: Exposición del puerto `162/udp`.
-- **Volúmenes**: Mapeo de directorios para trampas SNMP.
-- **Dependencias**: Depende del servicio `server`.
-- **Variables de Entorno**: Configuración del host del servidor Zabbix.
-
-#### PostgreSQL Server
-
-- **Volúmenes**: Persistencia de datos en un directorio local.
-- **Variables de Entorno**: Configuración de la base de datos y credenciales.
-
-## Instrucciones de Uso
+- `docker-compose.yml`: Define los servicios y configuraciones de Docker.
+- `env_vars/`: Contiene archivos de configuración para las variables de entorno.
+- `snmptraps/`: Almacena las trampas SNMP recibidas.
+- `zbx_env/`: Contiene volúmenes para configuraciones y datos de Zabbix.
 
 ---
-
-1. **Clonar el Repositorio**: Descarga este proyecto a tu máquina local.
-
-2. **Crear Volúmenes**: Asegúrate de que los directorios locales mapeados en el archivo `docker-compose.yml` existan y estén correctamente configurados.
-
-3. **Iniciar Servicios**: Ejecuta el comando `docker-compose up -d` para iniciar todos los servicios en segundo plano.
-
-4. **Acceder a Zabbix Web**: Abre un navegador y accede a `http://localhost:8080` o `https://localhost:8443` para configurar Zabbix.
-
-5. **Configurar Zabbix**: Sigue las instrucciones en la interfaz web para completar la configuración inicial.
-
-## Problemas Comunes
-
----
-
-- **Puertos Ocupados**: Asegúrate de que los puertos configurados no estén en uso por otros servicios.
-- **Errores de Conexión**: Verifica que las credenciales de PostgreSQL sean correctas y que el servicio esté disponible.
-
-## Contribuciones
-
----
-
-Si encuentras algún error o tienes mejoras, por favor, contribuye al proyecto abriendo una issue o enviando un pull request.
-
----
-
-Espero que esta guía te sea útil. Recuerda adaptar los nombres y detalles según sea necesario para tu proyecto específico.

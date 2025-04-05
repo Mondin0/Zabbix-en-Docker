@@ -31,7 +31,7 @@ services:
   web-nginx-pgsql:
     image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
     ports:
-      - "8080:8080"
+      - "9080:8080"
       - "8443:8443"
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -58,7 +58,7 @@ services:
       - ZBX_POSTMAXSIZE=64M
       - PHP_TZ=America/Argentina/Buenos_Aires
       - ZBX_MAXEXECUTIONTIME=500
-      
+
   agent:
     image: zabbix/zabbix-agent2:alpine-7.0-latest
     ports:
@@ -77,6 +77,8 @@ services:
       - server
     environment:
       - ZBX_SERVER_HOST=server
+      - ZBX_HOSTNAME=LinuxAgent
+ 
       
   snmptraps:
     image: zabbix/zabbix-snmptraps:alpine-7.0-latest
